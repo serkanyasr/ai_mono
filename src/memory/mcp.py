@@ -1,50 +1,50 @@
+import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 from fastmcp import FastMCP, Context
 import asyncio
 import json
-from src.utils import get_logger
-from src.db import get_mem0_client, test_memory_db_connection, Mem0Context
-from src.config.settings import settings
 
-logger = get_logger(__name__)
+from src.memory.connection import Mem0Context, get_mem0_client,test_db_connection
+from src.config.settings import settings
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(server: FastMCP) -> AsyncIterator[Mem0Context]:
+async def mem0_lifespan(server: FastMCP) -> AsyncIterator[Mem0Context]:
     """
     Manages the Mem0 client lifecycle.
-
+    
     Args:
         server: The FastMCP server instance
-
+        
     Yields:
         Mem0Context: The context containing the Mem0 client
     """
     # Test DB connection
-    db_ok = test_memory_db_connection()
+    db_ok = test_db_connection()
     if not db_ok:
         raise RuntimeError("Database connection failed!")
-
+    
     mem0_client = get_mem0_client()
-
+    
     try:
         yield Mem0Context(mem0_client=mem0_client)
     finally:
         pass
 
 mcp = FastMCP(
-    name=settings.mcp.memory_mcp_name,
-    version=settings.mcp.memory_mcp_version,
-    lifespan=lifespan,
-    host=settings.mcp.memory_mcp_host,
-    port=settings.mcp.memory_mcp_port,
+    name="memory_mcp",
+    version="0.1.0",
+    lifespan=mem0_lifespan,
+    host="0.0.0.0",
+    port=8050,
     json_response=True,
 )
 
 
 @mcp.tool()
-async def save_memory(ctx: Context, user_id: str, text: str) -> str:
+async def save_memory(ctx: Context,user_id: str, text: str) -> str:
     """Save information to your long-term memory.
 
     This tool is designed to store any type of information that might be useful in the future.
@@ -65,9 +65,9 @@ async def save_memory(ctx: Context, user_id: str, text: str) -> str:
 
 
 @mcp.tool()
-async def get_all_memories(ctx: Context, user_id: str) -> str:
+async def get_all_memories(ctx: Context,user_id:str) -> str:
     """Get all stored memories for the user.
-
+    
     Call this tool when you need complete context of all previously memories.
 
     Args:
@@ -81,13 +81,13 @@ async def get_all_memories(ctx: Context, user_id: str) -> str:
         mem0_client = ctx.request_context.lifespan_context.mem0_client
         memories = mem0_client.get_all(user_id=user_id)
         if isinstance(memories, dict) and "results" in memories:
-            flattened_memories = [memory["memory"]
-                                  for memory in memories["results"]]
+            flattened_memories = [memory["memory"] for memory in memories["results"]]
         else:
             flattened_memories = memories
         return json.dumps(flattened_memories, indent=2)
     except Exception as e:
         return f"Error retrieving memories: {str(e)}"
+
 
 
 @mcp.tool()
@@ -111,8 +111,7 @@ async def search_memory(ctx: Context, query: str, user_id: str, limit: int = 3) 
         memories = mem0_client.search(query, user_id=user_id, limit=limit)
 
         if isinstance(memories, dict) and "results" in memories:
-            flattened_memories = [memory["memory"]
-                                  for memory in memories["results"]]
+            flattened_memories = [memory["memory"] for memory in memories["results"]]
         else:
             flattened_memories = memories
         return json.dumps(flattened_memories, indent=2)
@@ -221,7 +220,7 @@ async def main():
     Starts the FastMCP server with the configured transport method.
     The transport method can be set via the MEMORY_MCP_TRANSPORT environment variable.
     """
-    transport = settings.mcp.MEMORY_MCP_TRANSPORT
+    transport = settings.mcp.memory_mcp_transport
     await mcp.run_async(transport=transport)
 
 

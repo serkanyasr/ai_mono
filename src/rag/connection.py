@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from ...config.settings import settings
+from src.config.settings import settings
 from typing import Optional
 import asyncpg
 from asyncpg.pool import Pool
@@ -56,10 +56,21 @@ class DatabasePool:
 
 
 # Global database pool instance
-rag_db_pool = DatabasePool()
+db_pool = DatabasePool()
 
 
-async def test_rag_db_connection() -> bool:
+async def initialize_database():
+    """Initialize database connection pool."""
+    await db_pool.initialize()
+
+
+async def close_database():
+    """Close database connection pool."""
+    await db_pool.close()
+
+
+
+async def test_db_connection() -> bool:
     """
     Test database connection.
 
@@ -75,7 +86,7 @@ async def test_rag_db_connection() -> bool:
         logger.info(
             f"RAG DB connection attempt: host={HOST}, port={PORT}, user={USER}, database={DBNAME}")
 
-        async with rag_db_pool.acquire() as conn:
+        async with db_pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
         return True
     except Exception as e:

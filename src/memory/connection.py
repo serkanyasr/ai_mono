@@ -50,7 +50,7 @@ def get_mem0_client() -> Memory:
         raise
 
 
-async def test_memory_db_connection() -> bool:
+async def test_db_connection() -> bool:
     """
     Test the connection to the PostgreSQL database and check if the pgvector extension is enabled.
     """

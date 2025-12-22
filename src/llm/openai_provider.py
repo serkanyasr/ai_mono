@@ -48,3 +48,16 @@ def get_openai_embedding_model() -> str:
     """
     return settings.llm.openai_emmbedding_model
 
+
+def get_openai_embedding_client() -> openai.AsyncOpenAI:
+    """
+    Get OpenAI embedding client configuration based on environment variables.
+
+    Returns:
+        Configured OpenAI-compatible client for embeddings
+    """
+    api_key = settings.llm.openai_api_key
+
+    return openai.AsyncOpenAI(api_key=api_key)
+
+

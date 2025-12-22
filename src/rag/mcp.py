@@ -1,21 +1,30 @@
-from dataclasses import dataclass
 from datetime import datetime
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
 import os
-from pydantic import BaseModel, Field, field_validator
 from typing import List, Dict, Any, Optional
 from fastmcp import FastMCP, Context
 import asyncio
 
+
 from dotenv import load_dotenv
-from ..db.rag_db import (
+from src.config.settings import settings
+from .models import (
+    VectorSearchInput,
+    HybridSearchInput,
+    DocumentInput,
+    DocumentListInput,
+    ChunkResult,
+    DocumentMetadata    
+)
+from src.rag.connection import (
     db_pool,
-    execute_init_sql,
-    initialize_database,
-    test_connection,
+    initialize_database, 
     close_database,
+    test_db_connection
+) 
+from src.rag.queries import (
     vector_search,
     hybrid_search,
     get_document,
@@ -26,11 +35,7 @@ from ..db.rag_db import (
     RAGContext
 )
 
-from ..llm_providers.providers import (
-    get_openai_embedding_client,
-    get_openai_embedding_model,
-)
-
+from src.llm import get_openai_embedding_client,get_openai_embedding_model
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -50,11 +55,10 @@ async def rag_lifespan(server: FastMCP) -> AsyncIterator[RAGContext]:
     try:
         # Initialize database connections
         await initialize_database()
-        await execute_init_sql()
         logger.info("RAG Database initialized")
 
         # Test connections
-        db_ok = await test_connection()
+        db_ok = await test_db_connection()
         if not db_ok:
             logger.error("RAG Database connection failed")
             raise RuntimeError("RAG Database connection failed")
@@ -62,7 +66,7 @@ async def rag_lifespan(server: FastMCP) -> AsyncIterator[RAGContext]:
         logger.info("RAG MCP system startup complete")
         
         # Yield context with database pool
-        yield RAGContext(db_pool=db_pool.pool)
+        yield RAGContext(db_pool=db_pool.pool) # type: ignore
 
 
     except Exception as e:
@@ -79,11 +83,11 @@ async def rag_lifespan(server: FastMCP) -> AsyncIterator[RAGContext]:
 
 
 mcp = FastMCP(
-    name="rag_mcp",
-    version="0.1.0",
+    name=settings.mcp.rag_mcp_name,
+    version=settings.mcp.rag_mcp_version,
     lifespan=rag_lifespan,
-    host="0.0.0.0",
-    port=8055,
+    host=settings.mcp.rag_mcp_host,
+    port=settings.mcp.rag_mcp_port,
     json_response=True
 )
 
@@ -108,59 +112,6 @@ async def generate_embedding(text: str) -> List[float]:
         raise
 
 
-# Tool Input Models
-class VectorSearchInput(BaseModel):
-    """Input for vector search tool."""
-    query: str = Field(..., description="Search query")
-    limit: int = Field(default=10, description="Maximum number of results")
-
-
-class HybridSearchInput(BaseModel):
-    """Input for hybrid search tool."""
-    query: str = Field(..., description="Search query")
-    limit: int = Field(default=10, description="Maximum number of results")
-    text_weight: float = Field(
-        default=0.3, description="Weight for text similarity (0-1)"
-    )
-
-
-class DocumentInput(BaseModel):
-    """Input for document retrieval."""
-    document_id: str = Field(..., description="Document ID to retrieve")
-
-
-class DocumentListInput(BaseModel):
-    """Input for listing documents."""
-    limit: int = Field(default=20, description="Maximum number of documents")
-    offset: int = Field(default=0, description="Number of documents to skip")
-
-
-class ChunkResult(BaseModel):
-    """Chunk search result model."""
-    chunk_id: str
-    document_id: str
-    content: str
-    score: float
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    document_title: str
-    document_source: str
-
-    @field_validator("score")
-    @classmethod
-    def validate_score(cls, v: float) -> float:
-        """Ensure score is between 0 and 1."""
-        return max(0.0, min(1.0, v))
-
-
-class DocumentMetadata(BaseModel):
-    """Document metadata model."""
-    id: str
-    title: str
-    source: str
-    metadata: Dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime
-    updated_at: datetime
-    chunk_count: Optional[int] = None
 
 
 @mcp.tool()
@@ -350,10 +301,11 @@ async def delete_all_documents_tool(ctx: Context) -> None:
         logger.error(f"Failed to delete all documents: {e}")
 
 
-
 async def main():
     """Main function to run MCP server."""
-    transport = os.getenv("RAG_MCP_TRANSPORT", "streamable-http")
+    transport = settings.mcp.rag_mcp_transport
+    
+    
     await mcp.run_async(transport=transport)
 
 
