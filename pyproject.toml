@@ -1,0 +1,13 @@
+[project]
+name = "ai-mono"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "asyncpg>=0.31.0",
+    "mem0ai>=1.0.1",
+    "pydantic>=2.12.5",
+    "pydantic-ai>=1.37.0",
+    "pydantic-settings>=2.12.0",
+]
