@@ -3,10 +3,9 @@ from collections.abc import AsyncIterator
 from fastmcp import FastMCP, Context
 import asyncio
 import json
-from ..utils import get_logger
-from ..db import get_mem0_client, test_memory_db_connection, Mem0Context
-from ..config.settings import settings
-
+from src.utils import get_logger
+from src.db import get_mem0_client, test_memory_db_connection, Mem0Context
+from src.config.settings import settings
 
 logger = get_logger(__name__)
 
