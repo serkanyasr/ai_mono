@@ -43,4 +43,4 @@ ENV PYTHONPATH=/app
 EXPOSE 8000 8050 8055 8501 8502
 
 # Default command (can be overridden in docker-compose)
-CMD ["python", "-m", "src.agent_tiers.api.main"]
+CMD ["python", "-m", "src.api.main"]

@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from src.agent_tiers.databases.memory_db import Mem0Context,get_mem0_client,test_db_connection
+from src.database.memory.connection import Mem0Context, get_mem0_client, test_db_connection
 
 logger = logging.getLogger(__name__)
 
