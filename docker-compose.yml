@@ -51,8 +51,19 @@ services:
       - MEMORY_DB_USER=${MEMORY_DB_USER:-postgres}
       - MEMORY_DB_PASSWORD=${MEMORY_DB_PASSWORD:-postgres}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - MEMORY_LLM_PROVIDER=${MEMORY_LLM_PROVIDER:-openai}
+      - MEMORY_LLM_MODEL=${MEMORY_LLM_MODEL:-gpt-4o-mini}
+      - MEMORY_EMBEDDING_PROVIDER=${MEMORY_EMBEDDING_PROVIDER:-openai}
+      - MEMORY_EMBEDDING_MODEL=${MEMORY_EMBEDDING_MODEL:-text-embedding-3-small}
+      - MEMORY_EMBEDDING_DIMS=${MEMORY_EMBEDDING_DIMS:-1536}
+      - MEMORY_MCP_HOST=${MEMORY_MCP_HOST:-0.0.0.0}
+      - MEMORY_MCP_PORT=${MEMORY_MCP_PORT:-8050}
+      - MEMORY_MCP_TRANSPORT=${MEMORY_MCP_TRANSPORT:-streamable-http}
     ports:
-      - "8050:8050"
+      - "${MEMORY_MCP_PORT:-8050}:${MEMORY_MCP_PORT:-8050}"
     volumes:
       - ./scripts:/scripts:ro
     depends_on:
@@ -72,8 +83,14 @@ services:
       - RAG_DB_USER=${RAG_DB_USER:-postgres}
       - RAG_DB_PASSWORD=${RAG_DB_PASSWORD:-postgres}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - RAG_MCP_HOST=${RAG_MCP_HOST:-0.0.0.0}
+      - RAG_MCP_PORT=${RAG_MCP_PORT:-8055}
+      - RAG_MCP_TRANSPORT=${RAG_MCP_TRANSPORT:-streamable-http}
     ports:
-      - "8055:8055"
+      - "${RAG_MCP_PORT:-8055}:${RAG_MCP_PORT:-8055}"
     volumes:
       - ./scripts:/scripts:ro
     depends_on:
@@ -98,14 +115,32 @@ services:
       - RAG_DB_USER=${RAG_DB_USER:-postgres}
       - RAG_DB_PASSWORD=${RAG_DB_PASSWORD:-postgres}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - API_ENV=${API_ENV:-dev}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - OPENAI_EMBEDDING_MODEL=${OPENAI_EMBEDDING_MODEL:-text-embedding-3-small}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3}
+      - MEMORY_LLM_PROVIDER=${MEMORY_LLM_PROVIDER:-openai}
+      - MEMORY_LLM_MODEL=${MEMORY_LLM_MODEL:-gpt-4o-mini}
+      - MEMORY_EMBEDDING_PROVIDER=${MEMORY_EMBEDDING_PROVIDER:-openai}
+      - MEMORY_EMBEDDING_MODEL=${MEMORY_EMBEDDING_MODEL:-text-embedding-3-small}
+      - MEMORY_EMBEDDING_DIMS=${MEMORY_EMBEDDING_DIMS:-1536}
+      - API_ENV=${API_ENV:-development}
       - API_HOST=0.0.0.0
-      - API_PORT=8000
-      - API_LOG_LEVEL=${API_LOG_LEVEL:-INFO}
-      - MCP_MEMORY_URL=http://mcp_memory:8050/mcp
-      - MCP_RAG_URL=http://mcp_rag:8055/mcp
+      - API_PORT=${API_PORT:-8000}
+      - API_LOG_LEVEL=${API_LOG_LEVEL:-info}
+      - SECRET_KEY=${SECRET_KEY}
+      - AGENT_CACHE_MAX_SIZE=${AGENT_CACHE_MAX_SIZE:-1000}
+      - AGENT_CACHE_TTL_SECONDS=${AGENT_CACHE_TTL_SECONDS:-3600}
+      - REDIS_URL=${REDIS_URL:-redis://localhost:6379/0}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
+      - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
+      - CORS_ALLOW_METHODS=${CORS_ALLOW_METHODS:-*}
+      - CORS_ALLOW_HEADERS=${CORS_ALLOW_HEADERS:-*}
+      - MCP_MEMORY_URL=http://mcp_memory:${MEMORY_MCP_PORT:-8050}/mcp
+      - MCP_RAG_URL=http://mcp_rag:${RAG_MCP_PORT:-8055}/mcp
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:${API_PORT:-8000}"
 
     deploy:
         resources:
@@ -129,7 +164,8 @@ services:
     container_name: ui
     command: chainlit run src/ui/chainlit_app.py --host 0.0.0.0 --port 8502 --no-cache
     environment:
-      - API_URL=http://api:8000
+      - API_URL=http://api:${API_PORT:-8000}
+      - CHAINLIT_AUTH_SECRET=${CHAINLIT_AUTH_SECRET}
       - CHAINLIT_DISABLE_CONFIG=true
     ports:
       - "8502:8502"
