@@ -1,78 +1,84 @@
 import json
-import logging
 from contextlib import asynccontextmanager
-import os
-import shutil
-import tempfile
-from typing import List, Optional
+from typing import Optional
 from datetime import datetime
 import uuid
-from fastapi import FastAPI, HTTPException, Header, Request
+
+from fastapi import FastAPI, HTTPException, Header, Request,UploadFile,File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi import FastAPI, UploadFile, File
 import uvicorn
 
 
-from ..ingestion.extract import PDFExtractionConfig
-from ..ingestion.ingest import IngestionConfig
-from ..adapters.agent_service import PydanticAIAgentService
-from ..adapters.repositories_asyncpg import AsyncpgSessionRepository, AsyncpgMessageRepository
-from ..adapters.retrieval_service import DBRetrievalService
-from ...application.use_cases.chat import ChatUseCase, ChatDependencies
-from ...application.use_cases.stream_chat import StreamChatUseCase, StreamChatDeps
-from ...application.agent_service.orchestrator import create_agent_orchestrator
-from ..config import settings
 
-from ..db.rag_db import (
-    execute_init_sql,
+# from src.ingestion.extractor import PDFExtractionConfig
+# from src.ingestion.pipeline import IngestionConfig
+from src.repositories import SessionRepository,MessageRepository,DocumentRepository
+from src.retrieval.service import RetrievalService
+from src.chat.stream import StreamChat, StreamChatDeps
+from src.agents.orchestrator import create_agent_orchestrator
+from src.config.settings import settings
+
+
+from src.database.rag import (
     initialize_database,
     close_database,
-    test_connection as rag_db_conn_test,
+    test_db_connection as rag_db_conn_test,
 )
-from ..db.memory_db import test_db_connection as memory_db_conn_test
+from src.database.memory.connection import test_db_connection as memory_db_conn_test
+
+
 
 from .schemas import (
     ChatRequest,
-    ChatResponse,
     ErrorResponse,
     HealthStatus,
     MessageHistoryResponse,
     MessageInfo,
     SessionInfo,
-    SessionListResponse,
-    ToolCall
-)
+    SessionListResponse
+    )
 
-from ...application.use_cases.chat import ChatUseCase, ChatDependencies
-from ...application.use_cases.stream_chat import StreamChatUseCase, StreamChatDeps
-from ...application.use_cases.upload_documents import UploadDocumentsUseCase, UploadDeps
-from ...infrastructure.adapters.ingestion_service import PipelineIngestionService
+
+from src.chat.stream import StreamChat, StreamChatDeps
+
+from src.utils import get_logger,setup_logging
+
+# from src.ingestion.use_case import UploadDocumentsUseCase, UploadDeps
+# from src.ingestion.service import IngestionService
+
+
+
 
 orchestrator = create_agent_orchestrator()
+
 
 # Initialize global services
 agent_service = orchestrator.get_agent_service()
 
+
+
 # API configuration
-API_ENV = settings.API_ENV
-API_HOST = settings.API_HOST
-API_PORT = settings.API_PORT
-API_LOG_LEVEL = settings.API_LOG_LEVEL
+API_ENV = settings.api.api_env
+API_HOST = settings.api.api_host
+API_PORT = settings.api.api_port
+API_LOG_LEVEL = settings.api.api_log_level
 
 
-# Configure logging
-logger = logging.getLogger(__name__)
-
-logging.basicConfig(
-    level=getattr(logging, API_LOG_LEVEL.upper()),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+setup_logging(
+    level=API_LOG_LEVEL,
+    log_file="logs/api.log" if API_ENV != "development" else None
 )
 
-if API_ENV == "development":
-    logger.setLevel(logging.DEBUG)
+logger = get_logger(__name__)
 
+logger.info("Logging initialized")
+
+
+#* =====================
+#* API Config
+#* =====================
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -81,19 +87,17 @@ async def lifespan(app: FastAPI):
     logger.info("Starting up system...")
 
     try:
-        # Initialize enhanced cache
-        from ..cache.agent_cache import get_agent_cache
+        # Initialize  cache Agent 
+        from src.cache.agent_cache import get_agent_cache
         app.state.agent_cache = get_agent_cache(
-            max_size=int(os.getenv("AGENT_CACHE_MAX_SIZE", "1000")),
-            ttl_seconds=int(os.getenv("AGENT_CACHE_TTL_SECONDS", "3600"))
+            max_size=settings.agent_cache_max_size,
+            ttl_seconds=settings.agent_cache_ttl_seconds
         )
         await app.state.agent_cache.start_cleanup_task()
         logger.info("Agent cache initialized")
 
         # Initialize RAG database connections
         await initialize_database()
-        await execute_init_sql(settings.SCHEMA_PATH)
-
         # Init MCP Servers
         servers_ok = await orchestrator.load_servers()
 
@@ -138,37 +142,42 @@ async def lifespan(app: FastAPI):
         logger.error(f"Shutdown error: {e}")
 
 
-# Create FastAPI app
+#* =====================
+#* Create FastAPI app
+#* =====================
+
 app = FastAPI(
-    title="Agent tiers",
-    description="AI agent tiers",
-    version="1.1.0",
+    title=settings.app_name,
+    description=settings.app_description,
+    version=settings.app_version,
     lifespan=lifespan,
 )
 
-# Add middleware with flexible CORS
+
+#* =====================
+#* Middleware with flexible CORS
+#* =====================
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.api.cors_origins,
+    allow_credentials=settings.api.cors_allow_credentials,
+    allow_methods=settings.api.cors_allow_methods,
+    allow_headers=settings.api.cors_allow_headers,
+    expose_headers=settings.api.cors_expose_headers,
+    max_age=settings.api.cors_max_age,
 )
+
+logger.info(f"CORS enabled. Origins={settings.api.cors_origins}")
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 
 
-def cleanup_folder(folder_path: str):
-    if os.path.exists(folder_path):
-        shutil.rmtree(folder_path)
-        
-        
-def progress_callback(current: int, total: int):
-    print(f"Progress: {current}/{total} documents processed")
+#* =====================
+#* API HEALTH
+#* =====================
 
-
-# API Endpoints
 @app.get("/health", response_model=HealthStatus)
 async def health_check():
     """Health check endpoint."""
@@ -191,7 +200,7 @@ async def health_check():
             rag_db_status=rag_db_status,
             memory_db_status=memory_db_status,
             llm_connection=True,
-            version="1.1.0",
+            version=settings.app_version,
             timestamp=datetime.now(),
         )
 
@@ -201,16 +210,20 @@ async def health_check():
 
 
 
+#* =====================
+#* API Endpoints
+#* =====================
+
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """Streaming chat endpoint using Server-Sent Events."""
     try:
         request_id = str(uuid.uuid4())
         logger.info(f"/chat/stream request_id={request_id} user_id={request.user_id}")
-        sessions_repo = AsyncpgSessionRepository()
-        messages_repo = AsyncpgMessageRepository()
+        sessions_repo = SessionRepository()
+        messages_repo = MessageRepository()
 
-        use_case = StreamChatUseCase(
+        chat = StreamChat(
             deps=StreamChatDeps(
                 sessions=sessions_repo,
                 messages=messages_repo,
@@ -222,7 +235,7 @@ async def chat_stream(request: ChatRequest):
         async def generate_stream():
             try:
                 yield f"data: {json.dumps({'type': 'request', 'request_id': request_id})}\n\n"
-                async for item in use_case.stream(
+                async for item in chat.stream(
                     message=request.message,
                     session_id=request.session_id,
                     user_id=request.user_id,
@@ -246,109 +259,137 @@ async def chat_stream(request: ChatRequest):
         logger.error(f"Streaming chat failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/documents/upload")
-async def upload_document(
-    files: List[UploadFile] = File(...),
-    x_ingestion_config: Optional[str] = Header(None, alias="X-Ingestion-Config")
-):
-    saved_files = []
-    # Upload security settings (from config)
-    ALLOWED_EXTENSIONS = set([ext.strip().lower() for ext in settings.UPLOAD_ALLOWED_EXTENSIONS.split(",") if ext.strip()])
-    MAX_FILE_SIZE_MB = settings.UPLOAD_MAX_FILE_MB
-    MAX_FILE_SIZE_BYTES = settings.UPLOAD_MAX_FILE_MB * 1024 * 1024
-    
 
-    config = None
-    if x_ingestion_config:
-        try:
-            config_data = json.loads(x_ingestion_config)
-            config = IngestionConfig(**config_data)
-        except (json.JSONDecodeError, TypeError, ValueError) as e:
-            raise HTTPException(
-                status_code=400, 
-                detail=f"Invalid X-Ingestion-Config header: {str(e)}"
+
+@app.get("/users/{user_id}/sessions", response_model=SessionListResponse)
+async def get_user_sessions(user_id: str):
+    """Get all sessions for a user."""
+    try:
+        sessions_repo = SessionRepository()
+        
+        # Get all sessions for user using your existing function
+        sessions = await sessions_repo.get_user_sessions(user_id)
+        
+        session_list = [
+            SessionInfo(
+                session_id=s["session_id"],
+                user_id=s["user_id"],
+                created_at=s["created_at"],
+                updated_at=s["updated_at"],
+                message_count=s.get("message_count", 0),
+                last_message=s.get("last_message", "")[:100] if s.get("last_message") else None
             )
-    else:
-        config = IngestionConfig(
-            use_semantic_chunking=True
+            for s in sessions
+        ]
+        
+        return SessionListResponse(
+            sessions=session_list,
+            total=len(session_list)
         )
     
-    # Unique folder name
-    unique_id = str(uuid.uuid4())
-    upload_dir = os.path.join(tempfile.gettempdir(), f"uploaded_{unique_id}")
-    os.makedirs(upload_dir, exist_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to get user sessions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
+
+@app.post("/users/{user_id}/sessions")
+async def create_new_session(user_id: str):
+    """Create a new session for user."""
     try:
-        for file in files:
-            # Extension validation
-            _, ext = os.path.splitext(file.filename)
-            ext = ext.lower()
-            if ext not in ALLOWED_EXTENSIONS:
-                raise HTTPException(status_code=400, detail=f"File type not allowed: {ext}")
-
-            # Normalize file name (only filename, prevent path traversal)
-            safe_name = os.path.basename(file.filename)
-            file_path = os.path.join(upload_dir, safe_name)
-
-            # Size validation and safe writing
-            total_written = 0
-            try:
-                with open(file_path, "wb") as buffer:
-                    while True:
-                        chunk = await file.read(1024 * 1024)  # 1MB chunk
-                        if not chunk:
-                            break
-                        total_written += len(chunk)
-                        if total_written > MAX_FILE_SIZE_BYTES:
-                            buffer.close()
-                            os.remove(file_path)
-                            raise HTTPException(status_code=413, detail=f"File too large. Max {MAX_FILE_SIZE_MB}MB")
-                        buffer.write(chunk)
-            finally:
-                try:
-                    await file.seek(0)
-                except Exception:
-                    pass
-
-            saved_files.append(file_path)
-    except Exception:
-        # Clean temp folder on any error
-        cleanup_folder(upload_dir)
-        raise
+        sessions_repo = SessionRepository()
+        
+        # Create session using your existing function
+        session_id = await sessions_repo.create(
+            user_id=user_id,
+            metadata={}
+        )
+        
+        return {
+            "session_id": session_id,
+            "user_id": user_id,
+            "created_at": datetime.now().isoformat()
+        }
     
-    extraction_config = PDFExtractionConfig(
-        save_to_files=False
-    )
+    except Exception as e:
+        logger.error(f"Failed to create session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str):
+    """Delete a session and all its messages."""
+    try:
+        sessions_repo = SessionRepository()
+        messages_repo = MessageRepository()
+        
+        # First delete all messages in the session
+        await messages_repo.delete(session_id)
+        
+        # Delete session 
+        await sessions_repo.delete(session_id)
+        
+        return {"success": True, "message": "Session deleted"}
     
-    # Create and run enhanced pipeline via use case
-    ingestion_service = PipelineIngestionService()
-    use_case = UploadDocumentsUseCase(UploadDeps(ingestion=ingestion_service))
-    results_summary = await use_case.run(
-        documents_folder=upload_dir,
-        output_folder=os.path.join(upload_dir, "output"),
-        config={
-            **(config.__dict__ if hasattr(config, "__dict__") else {}),
-            "enable_ocr": getattr(extraction_config, "enable_ocr", True),
-            "enable_vlm": getattr(extraction_config, "enable_vlm", True),
-            "enable_table_extraction": getattr(extraction_config, "enable_table_extraction", True),
-            "enable_image_extraction": getattr(extraction_config, "enable_image_extraction", True),
-            "save_to_files": getattr(extraction_config, "save_to_files", False),
-            "output_format": getattr(extraction_config, "output_format", "markdown"),
-        },
-        clean_before_ingest=False,
-    )
+    except Exception as e:
+        logger.error(f"Failed to delete session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # Clean temp folder after processing
-    cleanup_folder(upload_dir)
+@app.get("/users/{user_id}/exists")
+async def check_user_exists(user_id: str):
+    """Check if user has any sessions."""
+    try:
+        sessions_repo = SessionRepository()
+        
+        # Check if user exists using your new function
+        exists = await sessions_repo.check_user_exists(user_id)
+        
+        # Get session count
+        if exists:
+            sessions = await sessions_repo.get_user_sessions(user_id)
+            session_count = len(sessions)
+        else:
+            session_count = 0
+        
+        return {
+            "exists": exists,
+            "user_id": user_id,
+            "session_count": session_count
+        }
+    
+    except Exception as e:
+        logger.error(f"Failed to check user: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        "success": True,
-        "saved_files": [os.path.basename(p) for p in saved_files],
-        "config_used": config.__dict__ if config else None,
-        "processed_documents": results_summary.get("processed", 0),
-        "ingest_success": results_summary.get("success", 0),
-        "cleaned": True
-    }
+
+@app.get("/sessions/{session_id}/messages", response_model=MessageHistoryResponse)
+async def get_session_messages(session_id: str, limit: Optional[int] = None):
+    """Get all messages for a session."""
+    try:
+        messages_repo = MessageRepository()
+        
+        # Get messages using your existing function
+        messages = await messages_repo.list(session_id, limit=limit)
+        
+        message_list = [
+            MessageInfo(
+                message_id=m["id"],
+                session_id=m["session_id"],
+                role=m["role"],
+                content=m["content"],
+                created_at=m["created_at"],
+                metadata=m.get("metadata", {})
+            ) # type: ignore
+            for m in messages
+        ]
+        
+        return MessageHistoryResponse(
+            messages=message_list,
+            session_id=session_id,
+            total=len(message_list)
+        )
+    
+    except Exception as e:
+        logger.error(f"Failed to get session messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/cache/stats")
@@ -379,6 +420,13 @@ async def clear_cache():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
+
+
+#* =====================
+#* Exception handlers
+#* =====================
+
 # Exception handlers
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -394,14 +442,18 @@ async def global_exception_handler(request: Request, exc: Exception):
             request_id=str(uuid.uuid4()),
         ).model_dump(),
     )
+    
+    
+#* =====================
+#* Run the app with Uvicorn
+#* =====================
 
-
-# Run the app with Uvicorn
 if __name__ == "__main__":
     uvicorn.run(
-        "src.agent_tiers.infrastructure.api.main:app",
+        "src.api.main:app",
         host=API_HOST,
         port=API_PORT,
         reload=API_ENV == "development",
         log_level=API_LOG_LEVEL.lower(),
     )
+

@@ -46,7 +46,7 @@ def get_openai_embedding_model() -> str:
     Returns:
         Embedding model name
     """
-    return settings.llm.openai_emmbedding_model
+    return settings.llm.openai_embedding_model
 
 
 def get_openai_embedding_client() -> openai.AsyncOpenAI:

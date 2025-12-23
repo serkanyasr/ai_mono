@@ -7,7 +7,7 @@ from typing import List
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from src.config.providers import MCPConfig, DBConfig, LLMConfig
+from src.config.providers import MCPConfig, DBConfig, LLMConfig,APIConfig
 
 
 class Settings(BaseSettings):
@@ -19,7 +19,13 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
-
+    
+    # =====================
+    # Agent Cache
+    # =====================
+    agent_cache_max_size:int = Field(1000,validation_alias="AGENT_CACHE_MAX_SIZE")
+    agent_cache_ttl_seconds:int = Field(3600,validation_alias="AGENT_CACHE_TTL_SECONDS")
+    
     # =====================
     # Application Settings
     # =====================
@@ -27,7 +33,9 @@ class Settings(BaseSettings):
         default="AI Multi-Agent Enterprise System",
         validation_alias="APP_NAME",
     )
+    app_description: str = Field(default="Agent Tiers",validation_alias ="APP_DESCRIPTION" )
     app_version: str = Field(default="0.1.0", validation_alias="APP_VERSION")
+    
     debug: bool = Field(default=False, validation_alias="DEBUG")
 
     secret_key: str = Field(..., validation_alias="SECRET_KEY")
@@ -41,6 +49,7 @@ class Settings(BaseSettings):
         default=7,
         validation_alias="REFRESH_TOKEN_EXPIRE_DAYS",
     )
+    BASE_DIR = "src"
 
     # =====================
     # Nested provider configs
@@ -49,6 +58,7 @@ class Settings(BaseSettings):
     llm: LLMConfig = Field(default_factory=LLMConfig)
     db: DBConfig = Field(default_factory=DBConfig) # type: ignore
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    api: APIConfig = Field (default_factory=APIConfig)
 
     # =====================
     # Redis Settings
