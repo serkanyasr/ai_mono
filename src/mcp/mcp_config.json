@@ -13,6 +13,13 @@
       "headers": {
         "Accept": "text/event-stream"
       }
+    },
+    "context7": {
+      "protocol": "http-stream",
+      "url": "https://mcp.context7.com/mcp",
+      "headers": {
+        "CONTEXT7_API_KEY": "ctx7sk-0230fb7f-74f6-40b6-afc9-0bf556d928c2"
+      }
     }
   }
 }   
