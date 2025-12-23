@@ -3,6 +3,7 @@ Configuration settings
 """
 
 from typing import ClassVar, List
+from pathlib import Path
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -49,7 +50,7 @@ class Settings(BaseSettings):
         default=7,
         validation_alias="REFRESH_TOKEN_EXPIRE_DAYS",
     )
-    BASE_DIR: ClassVar[str] = "src"
+    BASE_DIR: ClassVar[Path] = Path("src")
 
     # =====================
     # Nested provider configs

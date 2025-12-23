@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):
 
         # Test connections
         rag_db_ok = await rag_db_conn_test()
-        memory_db_ok = memory_db_conn_test()
+        memory_db_ok = await memory_db_conn_test()
 
         if not rag_db_ok:
             logger.error("RAG Database connection failed")

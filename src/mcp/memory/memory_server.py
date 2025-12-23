@@ -26,7 +26,7 @@ async def mem0_lifespan(server: FastMCP) -> AsyncIterator[Mem0Context]:
         Mem0Context: The context containing the Mem0 client
     """
     # Test DB connection
-    db_ok = test_db_connection()
+    db_ok = await test_db_connection()
     if not db_ok:
         raise RuntimeError("Database connection failed!")
     

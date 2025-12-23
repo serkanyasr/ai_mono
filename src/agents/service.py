@@ -213,5 +213,6 @@ class AgentService:
             yield {"type": "end"}
             
         except Exception as e:
-            logger.error(f"Error streaming agent: {e}")
+            import traceback
+            logger.error(f"Error streaming agent: {e}\n{traceback.format_exc()}")
             yield {"type": "error", "error": str(e)}

@@ -55,7 +55,7 @@ class DatabasePool:
         if not self.pool:
             await self.initialize()
 
-        async with self.pool.acquire() as connection:
+        async with self.pool.acquire() as connection: # type: ignore
             yield connection
 
 
