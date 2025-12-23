@@ -7,7 +7,7 @@ All endpoint logic has been moved to src/api/v1/endpoints/
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
@@ -33,6 +33,16 @@ from src.utils import get_logger, setup_logging
 
 # API v1 router
 from .v1 import router as v1_router
+
+# Middleware
+from .v1.middleware.correlation import CorrelationIDMiddleware
+from .v1.middleware.logging_middleware import LoggingMiddleware
+from .v1.middleware.error_handlers import (
+    app_exception_handler,
+    http_exception_handler,
+    general_exception_handler,
+)
+from src.exception import BaseAppException
 
 # =====================
 # Initialize Services
@@ -118,7 +128,7 @@ async def lifespan(app: FastAPI):
     try:
         # Stop cache cleanup task
         if hasattr(app.state, 'agent_cache'):
-            await app.state.agent_cache.stop_cleanup_task()  # type: ignore
+            await app.state.agent_cache.stop_cleanup_task()
             logger.info("Agent cache stopped")
 
         await close_database()
@@ -141,6 +151,7 @@ app = FastAPI(
 # Middleware
 # =====================
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins="*",
@@ -151,7 +162,18 @@ app.add_middleware(
     max_age=3600,
 )
 
+# GZip compression
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Correlation ID middleware (must be before logging)
+app.add_middleware(CorrelationIDMiddleware)
+
+# Request logging middleware (skip health checks)
+app.add_middleware(
+    LoggingMiddleware,
+    log_query_params=True,
+    skip_paths=["/health", "/api/v1/health"]
+)
 
 # =====================
 # Include Routers
@@ -164,19 +186,14 @@ app.include_router(v1_router, prefix="/api/v1")
 # Exception Handlers
 # =====================
 
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Global exception handler."""
-    logger.error(f"Unhandled exception: {exc}")
+# Application-specific exceptions
+app.add_exception_handler(BaseAppException, app_exception_handler)
 
-    return JSONResponse(
-        status_code=500,
-        content=ErrorResponse(
-            error=str(exc),
-            error_type=type(exc).__name__,
-            request_id=str(request.state.client) if hasattr(request.state, 'client') else None,
-        ).model_dump(),
-    )
+# HTTP exceptions
+app.add_exception_handler(HTTPException, http_exception_handler)
+
+# General/unhandled exceptions
+app.add_exception_handler(Exception, general_exception_handler)
 
 # =====================
 # Run the App
