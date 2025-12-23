@@ -37,12 +37,17 @@ from .v1 import router as v1_router
 # Middleware
 from .v1.middleware.correlation import CorrelationIDMiddleware
 from .v1.middleware.logging_middleware import LoggingMiddleware
+from .v1.middleware.rate_limit import limiter, RateLimiter, RateLimits, custom_rate_limit_exceeded_handler
 from .v1.middleware.error_handlers import (
     app_exception_handler,
     http_exception_handler,
     general_exception_handler,
 )
 from src.exception import BaseAppException
+
+# Configure slowapi
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # =====================
 # Initialize Services
@@ -174,6 +179,16 @@ app.add_middleware(
     log_query_params=True,
     skip_paths=["/health", "/api/v1/health"]
 )
+
+# =====================
+# Rate Limiting
+# =====================
+
+# Set up rate limiting with slowapi
+app.state.limiter = limiter
+
+# Custom rate limit exceeded handler
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_exceeded_handler)
 
 # =====================
 # Include Routers

@@ -13,4 +13,9 @@ dependencies = [
     "pydantic>=2.12.5",
     "pydantic-ai>=1.37.0",
     "pydantic-settings>=2.12.0",
+    "slowapi>=0.1.9",
 ]
+
+# Rate limiting
+slowapi = "^0.1.9"
+limits = "^5.6.0"
