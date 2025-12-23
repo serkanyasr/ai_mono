@@ -4,7 +4,7 @@ import json
 from typing import List, Dict, Any, Optional
 import logging
 from src.config.settings import settings
-from connection import db_pool
+from .connection import db_pool
 from asyncpg.pool import Pool
 from dotenv import load_dotenv
 

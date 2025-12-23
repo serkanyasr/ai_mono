@@ -18,13 +18,13 @@ from .models import (
     ChunkResult,
     DocumentMetadata    
 )
-from src.rag.connection import (
+from src.database.rag.connection import (
     db_pool,
-    initialize_database, 
+    initialize_database,
     close_database,
     test_db_connection
-) 
-from src.rag.queries import (
+)
+from src.database.rag.queries import (
     vector_search,
     hybrid_search,
     get_document,

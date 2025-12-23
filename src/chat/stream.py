@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from typing import AsyncIterator, Dict, Any, List, Optional
-from src.database.repositories import SessionRepository, MessageRepository
+from src.repositories import SessionRepository, MessageRepository
 from src.agents.service import AgentService
 
 from src.cache.agent_cache import get_agent_cache

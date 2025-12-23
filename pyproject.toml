@@ -9,6 +9,7 @@ dependencies = [
     "chainlit>=2.9.3",
     "fastapi>=0.127.0",
     "mem0ai>=1.0.1",
+    "psycopg[pool]>=3.3.2",
     "pydantic>=2.12.5",
     "pydantic-ai>=1.37.0",
     "pydantic-settings>=2.12.0",

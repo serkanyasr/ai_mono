@@ -1,68 +1,85 @@
+-- ============================
+-- SAFE / IDEMPOTENT SCHEMA SETUP
+-- - Re-running this script will NOT delete data.
+-- - It will only create missing objects and update functions/views.
+-- ============================
+
+-- Extensions (safe)
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
-DROP TABLE IF EXISTS messages CASCADE;
-DROP TABLE IF EXISTS sessions CASCADE;
-DROP TABLE IF EXISTS chunks CASCADE;
-DROP TABLE IF EXISTS documents CASCADE;
-DROP INDEX IF EXISTS idx_chunks_embedding;
-DROP INDEX IF EXISTS idx_chunks_document_id;
-DROP INDEX IF EXISTS idx_documents_metadata;
-DROP INDEX IF EXISTS idx_chunks_content_trgm;
+-- ============================
+-- TABLES (safe)
+-- ============================
 
-CREATE TABLE documents (
+CREATE TABLE IF NOT EXISTS documents (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     source TEXT NOT NULL,
     content TEXT NOT NULL,
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_documents_metadata ON documents USING GIN (metadata);
-CREATE INDEX idx_documents_created_at ON documents (created_at DESC);
-
-CREATE TABLE chunks (
+CREATE TABLE IF NOT EXISTS chunks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     content TEXT NOT NULL,
     embedding vector(1536),
     chunk_index INTEGER NOT NULL,
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     token_count INTEGER,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_chunks_embedding ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 1);
-CREATE INDEX idx_chunks_document_id ON chunks (document_id);
-CREATE INDEX idx_chunks_chunk_index ON chunks (document_id, chunk_index);
-CREATE INDEX idx_chunks_content_trgm ON chunks USING GIN (content gin_trgm_ops);
-
-CREATE TABLE sessions (
+CREATE TABLE IF NOT EXISTS sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id TEXT,
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP WITH TIME ZONE
 );
 
-CREATE INDEX idx_sessions_user_id ON sessions (user_id);
-CREATE INDEX idx_sessions_expires_at ON sessions (expires_at);
-
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
     content TEXT NOT NULL,
-    metadata JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_messages_session_id ON messages (session_id, created_at);
+-- ============================
+-- INDEXES (safe)
+-- ============================
 
+-- documents
+CREATE INDEX IF NOT EXISTS idx_documents_metadata ON documents USING GIN (metadata);
+CREATE INDEX IF NOT EXISTS idx_documents_created_at ON documents (created_at DESC);
+
+-- chunks
+-- NOTE: ivfflat requires the table to have data and ANALYZE for best performance.
+-- NOTE: if you later change 'lists', you must DROP+CREATE index manually (cannot ALTER easily).
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding
+ON chunks USING ivfflat (embedding vector_cosine_ops) WITH (lists = 1);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_document_id ON chunks (document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_chunk_index ON chunks (document_id, chunk_index);
+CREATE INDEX IF NOT EXISTS idx_chunks_content_trgm ON chunks USING GIN (content gin_trgm_ops);
+
+-- sessions
+CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
+
+-- messages
+CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages (session_id, created_at);
+
+-- ============================
+-- FUNCTIONS (safe: CREATE OR REPLACE does not delete data)
+-- ============================
 
 CREATE OR REPLACE FUNCTION match_chunks(
     query_embedding vector(1536),
@@ -81,7 +98,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         c.id AS chunk_id,
         c.document_id,
         c.content,
@@ -119,7 +136,7 @@ AS $$
 BEGIN
     RETURN QUERY
     WITH vector_results AS (
-        SELECT 
+        SELECT
             c.id AS chunk_id,
             c.document_id,
             c.content,
@@ -132,7 +149,7 @@ BEGIN
         WHERE c.embedding IS NOT NULL
     ),
     text_results AS (
-        SELECT 
+        SELECT
             c.id AS chunk_id,
             c.document_id,
             c.content,
@@ -144,7 +161,7 @@ BEGIN
         JOIN documents d ON c.document_id = d.id
         WHERE to_tsvector('english', c.content) @@ plainto_tsquery('english', query_text)
     )
-    SELECT 
+    SELECT
         COALESCE(v.chunk_id, t.chunk_id) AS chunk_id,
         COALESCE(v.document_id, t.document_id) AS document_id,
         COALESCE(v.content, t.content) AS content,
@@ -175,7 +192,7 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
     RETURN QUERY
-    SELECT 
+    SELECT
         id AS chunk_id,
         chunks.content,
         chunks.chunk_index,
@@ -194,14 +211,39 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- ============================
+-- TRIGGERS (idempotent)
+-- ============================
 
-CREATE TRIGGER update_sessions_updated_at BEFORE UPDATE ON sessions
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'update_documents_updated_at'
+    ) THEN
+        CREATE TRIGGER update_documents_updated_at
+        BEFORE UPDATE ON documents
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'update_sessions_updated_at'
+    ) THEN
+        CREATE TRIGGER update_sessions_updated_at
+        BEFORE UPDATE ON sessions
+        FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END$$;
+
+-- ============================
+-- VIEW (safe: OR REPLACE)
+-- ============================
 
 CREATE OR REPLACE VIEW document_summaries AS
-SELECT 
+SELECT
     d.id,
     d.title,
     d.source,

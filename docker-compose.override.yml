@@ -6,7 +6,7 @@ services:
       - .:/app
     environment:
       - API_ENV=dev
-    command: python -m src.agent_tiers.api.main
+    command: python -m src.api.main
 
   ui:
     volumes:

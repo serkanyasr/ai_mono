@@ -133,7 +133,7 @@ async def lifespan(app: FastAPI):
     try:
         # Stop cache cleanup task
         if hasattr(app.state, 'agent_cache'):
-            await app.state.agent_cache.stop_cleanup_task()
+            await app.state.agent_cache.stop_cleanup_task() # type: ignore
             logger.info("Agent cache stopped")
         
         await close_database()
@@ -160,15 +160,13 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.api.cors_origins,
-    allow_credentials=settings.api.cors_allow_credentials,
-    allow_methods=settings.api.cors_allow_methods,
-    allow_headers=settings.api.cors_allow_headers,
-    expose_headers=settings.api.cors_expose_headers,
-    max_age=settings.api.cors_max_age,
+    allow_origins= "*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,
 )
-
-logger.info(f"CORS enabled. Origins={settings.api.cors_origins}")
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 

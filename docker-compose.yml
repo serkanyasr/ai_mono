@@ -43,7 +43,7 @@ services:
   mcp_memory:
     build: .
     container_name: mcp_memory
-    entrypoint: ["/bin/bash", "/scripts/entrypoint_mcp_memory.sh"]
+    command: python -m src.mcp.memory.memory_server
     environment:
       - MEMORY_DB_HOST=memory_postgres
       - MEMORY_DB_PORT=5432
@@ -64,8 +64,6 @@ services:
       - MEMORY_MCP_TRANSPORT=${MEMORY_MCP_TRANSPORT:-streamable-http}
     ports:
       - "${MEMORY_MCP_PORT:-8050}:${MEMORY_MCP_PORT:-8050}"
-    volumes:
-      - ./scripts:/scripts:ro
     depends_on:
       memory_postgres:
         condition: service_healthy
@@ -75,7 +73,7 @@ services:
   mcp_rag:
     build: .
     container_name: mcp_rag
-    entrypoint: ["/bin/bash", "/scripts/entrypoint_mcp_rag.sh"]
+    command: python -m src.mcp.rag.rag_server
     environment:
       - RAG_DB_HOST=rag_postgres
       - RAG_DB_PORT=5432
@@ -91,8 +89,6 @@ services:
       - RAG_MCP_TRANSPORT=${RAG_MCP_TRANSPORT:-streamable-http}
     ports:
       - "${RAG_MCP_PORT:-8055}:${RAG_MCP_PORT:-8055}"
-    volumes:
-      - ./scripts:/scripts:ro
     depends_on:
       rag_postgres:
         condition: service_healthy
@@ -133,10 +129,6 @@ services:
       - AGENT_CACHE_MAX_SIZE=${AGENT_CACHE_MAX_SIZE:-1000}
       - AGENT_CACHE_TTL_SECONDS=${AGENT_CACHE_TTL_SECONDS:-3600}
       - REDIS_URL=${REDIS_URL:-redis://localhost:6379/0}
-      - CORS_ORIGINS=${CORS_ORIGINS:-*}
-      - CORS_ALLOW_CREDENTIALS=${CORS_ALLOW_CREDENTIALS:-true}
-      - CORS_ALLOW_METHODS=${CORS_ALLOW_METHODS:-*}
-      - CORS_ALLOW_HEADERS=${CORS_ALLOW_HEADERS:-*}
       - MCP_MEMORY_URL=http://mcp_memory:${MEMORY_MCP_PORT:-8050}/mcp
       - MCP_RAG_URL=http://mcp_rag:${RAG_MCP_PORT:-8055}/mcp
     ports:

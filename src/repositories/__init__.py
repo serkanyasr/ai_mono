@@ -1,6 +1,6 @@
-from document import DocumentRepository
-from message import MessageRepository
-from session import SessionRepository
+from .document import DocumentRepository
+from .message import MessageRepository
+from .session import SessionRepository
 
 
 

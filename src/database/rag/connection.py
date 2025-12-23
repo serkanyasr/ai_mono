@@ -18,8 +18,12 @@ class DatabasePool:
         Args:
             database_url: PostgreSQL connection URL
         """
-        self.database_url = settings.db.rag_database_url
-    
+        # Construct asyncpg-compatible DSN (not SQLAlchemy format)
+        self.database_url = (
+            f"postgresql://{settings.db.rag_db_user}:{settings.db.rag_db_password}"
+            f"@{settings.db.rag_db_host}:{settings.db.rag_db_port}/{settings.db.rag_db_name}"
+        )
+
         if not self.database_url:
             raise ValueError("DATABASE_URL environment variable not set")
 

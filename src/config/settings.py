@@ -2,7 +2,7 @@
 Configuration settings
 """
 
-from typing import List
+from typing import ClassVar, List
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     
     debug: bool = Field(default=False, validation_alias="DEBUG")
 
-    secret_key: str = Field(..., validation_alias="SECRET_KEY")
+    secret_key: str = Field(default="default-secret-key-change-in-production", validation_alias="SECRET_KEY")
     algorithm: str = Field(default="HS256", validation_alias="ALGORITHM")
 
     access_token_expire_minutes: int = Field(
@@ -49,7 +49,7 @@ class Settings(BaseSettings):
         default=7,
         validation_alias="REFRESH_TOKEN_EXPIRE_DAYS",
     )
-    BASE_DIR = "src"
+    BASE_DIR: ClassVar[str] = "src"
 
     # =====================
     # Nested provider configs
@@ -65,22 +65,6 @@ class Settings(BaseSettings):
     # =====================
     redis_url: str = Field(default="redis://localhost:6379/0", validation_alias="REDIS_URL")
     redis_cache_ttl: int = Field(default=3600, validation_alias="REDIS_CACHE_TTL")
-
-    # =====================
-    # CORS Settings
-    # =====================
-    cors_origins: List[str] = Field(default_factory=lambda: ["*"], validation_alias="CORS_ORIGINS")
-
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v):
-        """Parse CORS origins from string or list"""
-        if v is None:
-            return ["*"]
-        if isinstance(v, str):
-            # allow "a,b,c" or single "*"
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
 
     # =====================
     # File Upload Settings
