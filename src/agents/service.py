@@ -8,6 +8,7 @@ import yaml
 from src.llm import get_openai_chat_model
 from src.mcp.client import load_mcp_servers
 from src.config.settings import settings
+from src.agents.tools.tool_call_extractor import ToolCallExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -100,38 +101,6 @@ class AgentService:
 
 #* ----------------------------------------------------------------
 
-    #! which tool use
-    def _extract_tool_calls(self, result) -> list[Dict[str, Any]]: 
-        """Extract tool calls from agent result."""
-        tools_used = []
-        try:
-            messages = result.all_messages()
-            for message in messages:
-                if hasattr(message, "parts"):
-                    for part in message.parts:
-                        if part.__class__.__name__ == "ToolCallPart":
-                            tool_name = str(getattr(part, 'tool_name', 'unknown'))
-                            tool_args = {}
-                            if hasattr(part, "args") and part.args is not None:
-                                if isinstance(part.args, str):
-                                    try:
-                                        import json
-                                        tool_args = json.loads(part.args)
-                                    except json.JSONDecodeError:
-                                        pass
-                                elif isinstance(part.args, dict):
-                                    tool_args = part.args
-                            tool_call_id = str(part.tool_call_id) if hasattr(part, "tool_call_id") and part.tool_call_id else None
-                            tools_used.append({
-                                "tool_name": tool_name,
-                                "args": tool_args,
-                                "tool_call_id": tool_call_id
-                            })
-        except Exception as e:
-            logger.warning(f"Failed to extract tool calls: {e}")
-        
-        return tools_used
-
 #! STREAM AGENT
 
     async def execute_agent(self, agent: Agent, message: str, context: Dict[str, Any]) -> Dict[str, Any]:
@@ -162,7 +131,7 @@ class AgentService:
             response = AgentResponse(
                 content=content,
                 session_id=agent_context.session_id,
-                tools_used=self._extract_tool_calls(result),
+                tools_used=ToolCallExtractor.extract(result),
                 retrieved_sources=agent_context.retrieved_documents,
                 metadata=agent_context.metadata
             )
@@ -205,7 +174,7 @@ class AgentService:
             
             # Extract tool calls
             result = run.result
-            tools_used = self._extract_tool_calls(result)
+            tools_used = ToolCallExtractor.extract(result)
             
             if tools_used:
                 yield {"type": "tools", "tools": tools_used}
