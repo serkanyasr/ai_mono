@@ -24,6 +24,8 @@ from src.database.rag import (
     test_db_connection as rag_db_conn_test,
 )
 from src.database.memory.connection import test_db_connection as memory_db_conn_test
+# Redis
+from src.cache.redis_provider import RedisConnectionManager
 
 # Schemas
 from .schemas import ErrorResponse
@@ -99,6 +101,31 @@ async def lifespan(app: FastAPI):
         # Initialize RAG database connections
         await initialize_database()
 
+        # Initialize Redis connection
+        try:
+            await RedisConnectionManager.initialize()
+            logger.info("Redis initialized", redis_url=settings.redis_url)
+            
+            # Update rate limiter to use Redis storage
+            from slowapi.storage import RedisStorage
+            from src.api.v1.middleware.rate_limit import limiter
+            
+            # Create new limiter with Redis storage
+            redis_limiter = Limiter(
+                key_func=get_remote_address,
+                storage_uri=settings.redis_url,
+                storage=RedisStorage(
+                    uri=settings.redis_url,
+                    prefix="rate_limit:"
+                )
+            )
+            # Update app state limiter
+            app.state.limiter = redis_limiter
+            logger.info("Rate limiting configured with Redis storage")
+        except Exception as redis_err:
+            logger.warning(f"Redis initialization failed: {redis_err}")
+            logger.info("Rate limiting using in-memory storage")
+
         # Initialize MCP Servers
         servers_ok = await orchestrator.load_servers()
         if servers_ok:
@@ -137,7 +164,11 @@ async def lifespan(app: FastAPI):
             logger.info("Agent cache stopped")
 
         await close_database()
-        logger.info("Connections closed")
+        logger.info("Database connections closed")
+        
+        # Close Redis connection
+        await RedisConnectionManager.close()
+        logger.info("Redis connection closed")
     except Exception as e:
         logger.error(f"Shutdown error: {e}")
 
