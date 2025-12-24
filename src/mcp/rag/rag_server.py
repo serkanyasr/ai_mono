@@ -2,13 +2,11 @@ from datetime import datetime
 import logging
 from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-import os
+
 from typing import List, Dict, Any, Optional
 from fastmcp import FastMCP, Context
 import asyncio
 
-
-from dotenv import load_dotenv
 from src.config.settings import settings
 from .models import (
     VectorSearchInput,
@@ -37,7 +35,6 @@ from src.database.rag.queries import (
 
 from src.llm import get_openai_embedding_client,get_openai_embedding_model
 
-load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Initialize embedding client with flexible provider
@@ -304,9 +301,13 @@ async def delete_all_documents_tool(ctx: Context) -> None:
 async def main():
     """Main function to run MCP server."""
     transport = settings.mcp.rag_mcp_transport
-    
-    
-    await mcp.run_async(transport=transport)
+
+    # Run with host and port for Docker compatibility
+    await mcp.run_async(
+        transport=transport,
+        host=settings.mcp.rag_mcp_host,
+        port=settings.mcp.rag_mcp_port
+    )
 
 
 if __name__ == "__main__":
