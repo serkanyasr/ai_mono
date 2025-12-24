@@ -4,13 +4,10 @@ from collections.abc import AsyncIterator
 from fastmcp import FastMCP, Context
 import asyncio
 import json
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
 
 from src.database.memory.connection import Mem0Context, get_mem0_client, test_db_connection
-
+from src.config.settings import settings
 logger = logging.getLogger(__name__)
 
 
@@ -224,8 +221,11 @@ async def main():
     Starts the FastMCP server with the configured transport method.
     The transport method can be set via the MEMORY_MCP_TRANSPORT environment variable.
     """
-    transport = os.getenv("MEMORY_MCP_TRANSPORT", "streamable-http")
-    await mcp.run_async(transport=transport)
+    transport = settings.mcp.memory_mcp_transport
+    await mcp.run_async(transport=transport,
+                        host=settings.mcp.memory_mcp_host,
+                        port=settings.mcp.memory_mcp_port)
+
 
 
 if __name__ == "__main__":
