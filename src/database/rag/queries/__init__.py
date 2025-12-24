@@ -38,7 +38,7 @@ from .search_queries import (
 )
 
 # Connection pool
-from .connection import db_pool
+from ..connection import db_pool
 
 # Dataclass for RAG context
 from dataclasses import dataclass

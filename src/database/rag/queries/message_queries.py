@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 import json
 import logging
 
-from .connection import db_pool
+from ..connection import db_pool
 
 logger = logging.getLogger(__name__)
 

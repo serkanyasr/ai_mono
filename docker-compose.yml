@@ -134,11 +134,6 @@ services:
     ports:
       - "${API_PORT:-8000}:${API_PORT:-8000}"
 
-    deploy:
-        resources:
-          reservations:
-            devices:
-              - capabilities: [gpu]
     depends_on:
       memory_postgres:
         condition: service_healthy

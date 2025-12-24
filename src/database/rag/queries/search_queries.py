@@ -5,7 +5,7 @@ from asyncpg.pool import Pool
 import json
 import logging
 
-from .connection import db_pool
+from ..connection import db_pool
 
 logger = logging.getLogger(__name__)
 
