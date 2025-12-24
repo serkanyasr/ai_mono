@@ -68,15 +68,24 @@ async def get_rate_limit_status(request: Request) -> Dict[str, Any]:
     """
     correlation_id = getattr(request.state, "correlation_id", "unknown")
 
+    # Get storage type from limiter
+    storage_type = "memory"
+    storage_backend = "memory"
+    if hasattr(request.app.state, 'limiter'):
+        limiter_storage = request.app.state.limiter._storage
+        storage_type = type(limiter_storage).__name__
+        if "Redis" in storage_type:
+            storage_backend = "redis"
+
     return {
         "correlation_id": correlation_id,
         "client": request.client.host if request.client else "unknown",
         "path": request.url.path,
-        "limiter_type": "memory",  # Currently using in-memory storage
-        "storage_backend": "memory",  # For production, use Redis
+        "limiter_type": storage_type,
+        "storage_backend": storage_backend,
         "status": "active",
         "recommendations": {
-            "production": "Use Redis storage for distributed rate limiting",
+            "production": "Rate limiting is configured with Redis storage" if storage_backend == "redis" else "Use Redis storage for distributed rate limiting",
             "configuration": "See src/api/v1/middleware/rate_limit.py for configuration",
         }
     }

@@ -71,13 +71,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Configure storage if Redis URI provided
         if storage_uri:
-            from slowapi.storage import RedisStorage
             from slowapi.util import get_remote_address
 
-            storage = RedisStorage(
-                uri=storage_uri,
-                prefix="rate_limit:"
-            )
             # Update limiter to use Redis storage
             global limiter
             limiter = Limiter(

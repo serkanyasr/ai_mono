@@ -48,6 +48,7 @@ from .v1.middleware.error_handlers import (
 from src.exception import BaseAppException
 
 # Configure slowapi
+from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 
@@ -105,19 +106,14 @@ async def lifespan(app: FastAPI):
         try:
             await RedisConnectionManager.initialize()
             logger.info("Redis initialized", redis_url=settings.redis_url)
-            
+
             # Update rate limiter to use Redis storage
-            from slowapi.storage import RedisStorage
             from src.api.v1.middleware.rate_limit import limiter
-            
+
             # Create new limiter with Redis storage
             redis_limiter = Limiter(
                 key_func=get_remote_address,
-                storage_uri=settings.redis_url,
-                storage=RedisStorage(
-                    uri=settings.redis_url,
-                    prefix="rate_limit:"
-                )
+                storage_uri=settings.redis_url
             )
             # Update app state limiter
             app.state.limiter = redis_limiter
