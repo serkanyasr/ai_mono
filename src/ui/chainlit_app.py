@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # API Configuration
 API_HOST =settings.api.api_host
 API_PORT =settings.api.api_port
-API_BASE_URL = os.getenv("API_URL", f"http://{API_HOST}:{API_PORT}")
+API_BASE_URL = os.getenv("API_URL", f"http://{API_HOST}:{API_PORT}/api/v1")
 
 
 class APIClient:
