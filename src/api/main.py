@@ -34,7 +34,7 @@ from .schemas import ErrorResponse
 from src.utils import get_logger, setup_logging
 
 # API v1 router
-from .v1 import router as v1_router
+from .v1.router import router as v1_router
 
 # Middleware
 from .v1.middleware.correlation import CorrelationIDMiddleware

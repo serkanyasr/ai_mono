@@ -15,9 +15,15 @@ class BaseCustomException(Exception):
         details: Optional[Dict[str, Any]] = None
     ):
         self.message = message
+        self.detail = message  # Alias for compatibility
         self.status_code = status_code
         self.details = details or {}
+        self.error_type = self.__class__.__name__
         super().__init__(self.message)
+
+
+# Alias for compatibility with error_handlers
+BaseAppException = BaseCustomException
 
 
 class ValidationError(BaseCustomException):

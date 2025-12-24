@@ -43,10 +43,12 @@ def add_correlation_id(logger: Any, method_name: str, event_dict: EventDict) -> 
     Returns:
         Updated event dictionary with correlation_id
     """
-    # Check if correlation_id is in structlog context
-    context = structlog.get_context()
-    if "correlation_id" in context:
-        event_dict["correlation_id"] = context["correlation_id"]
+    # Check if correlation_id is in the event dict (from contextvars)
+    if "correlation_id" not in event_dict:
+        # Try to get from contextvars
+        context = structlog.contextvars.get_contextvars()
+        if "correlation_id" in context:
+            event_dict["correlation_id"] = context["correlation_id"]
 
     return event_dict
 
@@ -103,7 +105,14 @@ def setup_structured_logging(
         shared_processors.append(structlog.processors.TimeStamper(fmt="iso"))
 
     if include_caller_info:
-        shared_processors.append(structlog.stdlib.add_caller_info())
+        # Use CallsiteParameterAdder for caller information
+        shared_processors.append(
+            structlog.processors.CallsiteParameterAdder(
+                parameters=[structlog.processors.CallsiteParameter.FILENAME,
+                           structlog.processors.CallsiteParameter.LINENO,
+                           structlog.processors.CallsiteParameter.FUNC_NAME]
+            )
+        )
 
     if json_format:
         # JSON format for production/file logging
@@ -134,30 +143,10 @@ def setup_structured_logging(
         log_path = Path(log_file)
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create file handler with JSON formatter
+        # Add file handler to standard logging
         file_handler = logging.FileHandler(log_path)
         file_handler.setLevel(getattr(logging, level.upper()))
-
-        # Add JSON processor for file output
-        file_processors = [
-            structlog.contextvars.merge_contextvars,
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.add_logger_name,
-            add_correlation_id,
-            add_app_context,
-            structlog.processors.TimeStamper(fmt="iso"),
-            rename_message,
-            structlog.processors.JSONRenderer(),
-        ]
-
-        # Configure separate logger for file output
-        structlog.configure(
-            processors=file_processors,
-            wrapper_class=structlog.stdlib.BoundLogger,
-            context_class=dict,
-            logger_factory=structlog.WriteLoggerFactory(file_handler),
-            cache_logger_on_first_use=True,
-        )
+        logging.getLogger().addHandler(file_handler)
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
